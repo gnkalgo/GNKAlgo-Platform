@@ -1,5 +1,5 @@
 import os
-os.environ.update({"ENVIRONMENT": "test", "DATABASE_URL": "sqlite://", "JWT_SECRET": "test-jwt-secret-that-is-long-and-random", "API_KEY_PEPPER": "test-api-pepper-that-is-long-and-random", "EXPOSE_DEV_TOKENS": "true"})
+os.environ.update({"ENVIRONMENT": "test", "DATABASE_URL": "sqlite://", "JWT_SECRET": "test-jwt-secret-that-is-long-and-random", "API_KEY_PEPPER": "test-api-pepper-that-is-long-and-random", "FIELD_ENCRYPTION_KEY": "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=", "EXPOSE_DEV_TOKENS": "true"})
 
 import pytest
 from fastapi.testclient import TestClient

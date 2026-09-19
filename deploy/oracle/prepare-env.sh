@@ -64,6 +64,7 @@ umask 077
   printf 'SMTP_USERNAME=%s\n' "$smtp_username"
   printf 'SMTP_PASSWORD=%s\n' "$smtp_password"
   printf 'SMTP_FROM=gnkalgo.admin@gmail.com\n'
+  printf 'DHAN_CLIENT_ID=\n'
   printf 'DHAN_APP_ID=\n'
   printf 'DHAN_APP_SECRET=\n'
   printf 'DHAN_REDIRECT_URI=https://api.gnkalgo.com/api/v1/brokers/dhan/callback\n'

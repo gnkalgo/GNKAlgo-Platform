@@ -3,6 +3,7 @@ from typing import Annotated, Literal
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+from cryptography.fernet import Fernet
 
 
 class Settings(BaseSettings):
@@ -27,6 +28,7 @@ class Settings(BaseSettings):
     smtp_username: str | None = None
     smtp_password: str | None = None
     smtp_from: str = "security@gnkalgo.com"
+    dhan_client_id: str | None = None
     dhan_app_id: str | None = None
     dhan_app_secret: str | None = None
     dhan_redirect_uri: str = "http://localhost:8000/api/v1/brokers/dhan/callback"
@@ -51,6 +53,10 @@ class Settings(BaseSettings):
                 raise RuntimeError(f"{name.upper()} must be a strong production secret")
         if not self.field_encryption_key:
             raise RuntimeError("FIELD_ENCRYPTION_KEY is required in production")
+        try:
+            Fernet(self.field_encryption_key.encode())
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError("FIELD_ENCRYPTION_KEY must be a valid Fernet key") from exc
         if not self.cookie_secure:
             raise RuntimeError("COOKIE_SECURE must be true in production")
         if not self.smtp_host:

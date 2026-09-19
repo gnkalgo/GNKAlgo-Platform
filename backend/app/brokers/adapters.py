@@ -32,8 +32,8 @@ class BrokerAdapter(ABC):
 class DhanAdapter(BrokerAdapter):
     name = BrokerName.DHAN
     async def authorization_url(self, state: str) -> tuple[str, dict]:
-        if not settings.dhan_app_id or not settings.dhan_app_secret: raise BrokerError("BROKER_NOT_CONFIGURED")
-        data = await self._request("POST", "https://auth.dhan.co/app/generate-consent", params={"client_id": settings.dhan_app_id}, headers={"app_id": settings.dhan_app_id, "app_secret": settings.dhan_app_secret})
+        if not settings.dhan_client_id or not settings.dhan_app_id or not settings.dhan_app_secret: raise BrokerError("BROKER_NOT_CONFIGURED")
+        data = await self._request("POST", "https://auth.dhan.co/app/generate-consent", params={"client_id": settings.dhan_client_id}, headers={"app_id": settings.dhan_app_id, "app_secret": settings.dhan_app_secret})
         consent = data.get("consentAppId")
         if not consent: raise BrokerError("BROKER_AUTH_FAILED")
         return f"https://auth.dhan.co/login/consentApp-login?{urlencode({'consentAppId': consent})}", {"consent_id": consent}
