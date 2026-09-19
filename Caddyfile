@@ -1,0 +1,14 @@
+{
+	email {$ACME_EMAIL}
+}
+
+gnkalgo.com, www.gnkalgo.com, api.gnkalgo.com {
+	encode zstd gzip
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "same-origin"
+		-Server
+	}
+	reverse_proxy nginx:80
+}

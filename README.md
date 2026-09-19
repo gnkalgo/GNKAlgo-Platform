@@ -76,7 +76,7 @@ Copy `.env.example` to `.env` and replace every placeholder. Generate a Fernet k
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
 ```
 
-Required production values include strong `JWT_SECRET`, `API_KEY_PEPPER`, `FIELD_ENCRYPTION_KEY`, `POSTGRES_PASSWORD`, SMTP settings, exact CORS/frontend origins, and broker application credentials. `COOKIE_SECURE=true` is mandatory in production. Use an external TLS load balancer or add certificates to Nginx; do not expose the included port-80 Compose endpoint directly to the internet.
+Required production values include strong `JWT_SECRET`, `API_KEY_PEPPER`, `FIELD_ENCRYPTION_KEY`, `POSTGRES_PASSWORD`, SMTP settings, exact CORS/frontend origins, and broker application credentials. `COOKIE_SECURE=true` is mandatory in production. The production stack places Caddy in front of internal Nginx; Caddy obtains and renews public certificates after the DNS names resolve to the VM and ports 80/443 are reachable. PostgreSQL, Redis, FastAPI, Next.js, and Nginx are not published directly.
 
 Register these exact callback URLs with providers (adjust hostname only if your deployment differs):
 
@@ -89,6 +89,8 @@ The legacy `http://gnkalgo.com:5000/dhan/callback` is intentionally not hard-cod
 Start the stack:
 
 ```bash
+chmod +x deploy/oracle/prepare-env.sh
+./deploy/oracle/prepare-env.sh
 docker compose config
 docker compose up --build -d
 docker compose exec api python -m app.cli create-admin admin@gnkalgo.com
