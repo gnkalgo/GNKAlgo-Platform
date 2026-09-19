@@ -1,0 +1,21 @@
+"use client";
+import {FormEvent,useEffect,useState} from "react";
+import {QRCodeSVG} from "qrcode.react";
+import {AppShell} from "@/components/AppShell";
+import {Field,Notice} from "@/components/UI";
+import {api} from "@/lib/api";
+
+type Sec={mfa_enabled:boolean;active_sessions:number};
+type Setup={provisioning_uri:string;secret:string};
+
+export default function Security(){
+ const [sec,setSec]=useState<Sec|null>(null),[setup,setSetup]=useState<Setup|null>(null),[code,setCode]=useState(""),[codes,setCodes]=useState<string[]>([]),[message,setMessage]=useState(""),[error,setError]=useState("");
+ const [disable,setDisable]=useState({password:"",code:""});
+ const [password,setPassword]=useState({current_password:"",new_password:"",new_password_confirmation:""});
+ useEffect(()=>{api<Sec>("/users/me/security").then(setSec)},[]);
+ async function begin(){setError("");try{setSetup(await api<Setup>("/auth/mfa/setup",{method:"POST"}))}catch(e){setError((e as Error).message)}}
+ async function verify(e:FormEvent){e.preventDefault();try{const r=await api<{message:string;recovery_codes:string[]}>("/auth/mfa/verify",{method:"POST",body:JSON.stringify({code})});setCodes(r.recovery_codes);setMessage(r.message);setSetup(null);setSec(sec?{...sec,mfa_enabled:true}:sec)}catch(e){setError((e as Error).message)}}
+ async function disableMfa(e:FormEvent){e.preventDefault();try{const r=await api<{message:string}>("/auth/mfa/disable",{method:"POST",body:JSON.stringify(disable)});setMessage(r.message);setSec(sec?{...sec,mfa_enabled:false}:sec);setDisable({password:"",code:""})}catch(e){setError((e as Error).message)}}
+ async function changePassword(e:FormEvent){e.preventDefault();try{const r=await api<{message:string}>("/users/me/password",{method:"POST",body:JSON.stringify(password)});setMessage(r.message);setPassword({current_password:"",new_password:"",new_password_confirmation:""})}catch(e){setError((e as Error).message)}}
+ return <AppShell title="Security settings" kicker="SETTINGS / IDENTITY">{error&&<Notice tone="error">{error}</Notice>}{message&&<Notice tone="success">{message}</Notice>}<div className="two-col"><div className="card"><div className="card-head"><div><h3>Authenticator app</h3><p className="muted">Require a rotating code after your password.</p></div><span className={`badge ${sec?.mfa_enabled?"":"disconnected"}`}>{sec?.mfa_enabled?"ENABLED":"OFF"}</span></div>{!sec?.mfa_enabled&&!setup&&<button className="btn" onClick={begin}>Set up MFA</button>}{setup&&<form className="form" onSubmit={verify}><div className="qr"><QRCodeSVG value={setup.provisioning_uri} size={150}/></div><p className="muted">Scan this QR code, then enter the six-digit code.</p><Field label="Verification code" value={code} pattern="[0-9]{6}" onChange={e=>setCode(e.target.value)} required/><button className="btn">Enable MFA</button></form>}{sec?.mfa_enabled&&<form className="form" onSubmit={disableMfa}><Field label="Password" type="password" value={disable.password} onChange={e=>setDisable({...disable,password:e.target.value})} required/><Field label="Authenticator or recovery code" value={disable.code} onChange={e=>setDisable({...disable,code:e.target.value})} required/><button className="btn danger">Disable MFA</button></form>}{codes.length>0&&<><p className="muted">Save these recovery codes now. They are shown once.</p><div className="secret">{codes.join("  ·  ")}</div></>}</div><div className="card"><h3>Change password</h3><p className="muted">Other devices will be signed out when your password changes.</p><form className="form" onSubmit={changePassword}><Field label="Current password" type="password" value={password.current_password} onChange={e=>setPassword({...password,current_password:e.target.value})} required/><Field label="New password" type="password" minLength={12} value={password.new_password} onChange={e=>setPassword({...password,new_password:e.target.value})} required/><Field label="Confirm new password" type="password" value={password.new_password_confirmation} onChange={e=>setPassword({...password,new_password_confirmation:e.target.value})} required/><button className="btn">Update password</button></form><p className="muted">{sec?.active_sessions??0} active session(s).</p></div></div></AppShell>
+}

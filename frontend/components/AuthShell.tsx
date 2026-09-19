@@ -1,0 +1,4 @@
+import {Logo} from "./Logo";
+export function AuthShell({eyebrow, title, subtitle, children}:{eyebrow:string;title:string;subtitle:string;children:React.ReactNode}) {
+  return <main className="auth-shell"><section className="brand-panel"><Logo/><div className="brand-copy"><span className="eyebrow">SECURE ALGORITHMIC INTELLIGENCE</span><h1>Built for conviction.<br/>Engineered for control.</h1><p>One protected workspace for your identity, broker connections and developer credentials.</p></div><div className="trust-row"><span>256-bit encryption</span><span>MFA protected</span><span>Auditable access</span></div></section><section className="form-panel"><div className="auth-card"><span className="eyebrow">{eyebrow}</span><h2>{title}</h2><p className="muted">{subtitle}</p>{children}</div></section></main>;
+}

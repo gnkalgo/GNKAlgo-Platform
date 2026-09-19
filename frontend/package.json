@@ -1,0 +1,8 @@
+{
+  "name": "gnkalgo-web",
+  "version": "0.2.0",
+  "private": true,
+  "scripts": {"dev": "next dev", "build": "next build", "start": "next start", "lint": "next lint", "typecheck": "tsc --noEmit"},
+  "dependencies": {"next": "16.3.5", "react": "19.1.1", "react-dom": "19.1.1", "lucide-react": "0.542.0", "qrcode.react": "4.2.0"},
+  "devDependencies": {"@types/node": "24.3.1", "@types/react": "19.1.12", "@types/react-dom": "19.1.9", "typescript": "5.9.2"}
+}
