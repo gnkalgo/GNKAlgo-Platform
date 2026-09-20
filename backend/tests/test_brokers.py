@@ -5,8 +5,9 @@ from app.security import decrypt_json
 from .conftest import auth, login, register_verified
 
 class FakeAdapter:
+    def __init__(self): self.last_code = None
     async def authorization_url(self, state): return f"https://broker.example/authorize?state={state}", {"nonce": "safe"}
-    async def exchange(self, code, context): return {"access_token": "broker-secret-token", "client_id": "client-1"}
+    async def exchange(self, code, context): self.last_code = code; return {"access_token": "broker-secret-token", "client_id": "client-1"}
     async def test(self, credentials): return credentials.get("access_token") == "broker-secret-token"
 
 def test_broker_callback_encryption_and_ownership(client, db, monkeypatch):
@@ -27,12 +28,14 @@ def test_broker_callback_encryption_and_ownership(client, db, monkeypatch):
     db.refresh(connection); assert decrypt_json(connection.encrypted_credentials) == {}
 
 def test_callback_state_is_single_use(client, monkeypatch):
-    monkeypatch.setitem(ADAPTERS, BrokerName.FYERS, FakeAdapter())
+    adapter = FakeAdapter()
+    monkeypatch.setitem(ADAPTERS, BrokerName.FYERS, adapter)
     register_verified(client); tokens = login(client)
-    start = client.post("/api/v1/brokers/FYERS/connect", headers=auth(tokens["access_token"]))
+    start = client.post("/api/v1/brokers/fyers/connect", headers=auth(tokens["access_token"]))
     state = start.json()["authorization_url"].split("state=")[1]
-    url = f"/api/v1/brokers/FYERS/callback?auth_code=x&state={state}"
+    url = f"/api/v1/brokers/fyers/callback?s=ok&code=200&auth_code=fyers-auth-code&state={state}"
     assert client.get(url, follow_redirects=False).status_code == 302
+    assert adapter.last_code == "fyers-auth-code"
     assert client.get(url, follow_redirects=False).status_code == 400
 
 def test_broker_endpoints_require_authentication(client):

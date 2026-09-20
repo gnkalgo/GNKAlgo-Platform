@@ -20,6 +20,13 @@ class BrokerName(str, enum.Enum):
     FYERS = "FYERS"
     UPSTOX = "UPSTOX"
 
+    @classmethod
+    def _missing_(cls, value):
+        if isinstance(value, str):
+            normalized = value.upper()
+            return next((broker for broker in cls if broker.value == normalized), None)
+        return None
+
 class BrokerStatus(str, enum.Enum):
     PENDING = "PENDING"
     CONNECTED = "CONNECTED"

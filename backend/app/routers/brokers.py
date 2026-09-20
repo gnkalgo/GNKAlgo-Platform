@@ -27,6 +27,17 @@ def _scope(principal: Principal, required: str) -> None:
     if principal.api_key_id and required not in (principal.scopes or set()):
         raise HTTPException(status_code=403, detail="Insufficient API key scope")
 
+def _callback_code(broker: BrokerName, code: str | None, auth_code: str | None, token_id: str | None) -> str | None:
+    # FYERS returns code=200 as a status and auth_code as the credential. Keep
+    # provider parameters explicit so a status value is never exchanged.
+    if broker == BrokerName.FYERS:
+        return auth_code
+    if broker == BrokerName.DHAN:
+        return token_id
+    if broker == BrokerName.UPSTOX:
+        return code
+    return None
+
 @router.get("", response_model=list[BrokerOut])
 def list_connections(principal: Principal = Depends(get_principal), db: Session = Depends(get_db)):
     _scope(principal, "broker:read")
@@ -46,7 +57,7 @@ async def connect(broker: BrokerName, response: Response, request: Request, prin
 @router.get("/{broker}/callback")
 async def callback(broker: BrokerName, request: Request, state: str | None = Query(default=None), code: str | None = Query(default=None), auth_code: str | None = Query(default=None), tokenId: str | None = Query(default=None), gnk_oauth_state: str | None = Cookie(default=None), db: Session = Depends(get_db)):
     raw_state = state or gnk_oauth_state
-    auth_code_value = code or auth_code or tokenId
+    auth_code_value = _callback_code(broker, code, auth_code, tokenId)
     if not raw_state or not auth_code_value: raise HTTPException(status_code=400, detail="Invalid broker callback")
     saved = db.scalar(select(OAuthState).where(OAuthState.state_hash == hash_token(raw_state), OAuthState.broker == broker))
     if not saved or saved.used_at or _aware(saved.expires_at) <= utcnow(): raise HTTPException(status_code=400, detail="Invalid or expired broker state")
