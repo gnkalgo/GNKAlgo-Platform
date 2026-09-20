@@ -98,6 +98,28 @@ docker compose exec api python -m app.cli create-admin admin@gnkalgo.com
 
 The API container runs `alembic upgrade head` before startup.
 
+### Oracle VM operations
+
+Use the production scripts from `/opt/gnkalgo`. They preserve PostgreSQL,
+Redis, and Caddy volumes:
+
+```bash
+chmod +x deploy/oracle/*.sh
+./deploy/oracle/start-all.sh                  # validate, build, and start
+./deploy/oracle/status-all.sh                 # service and disk status
+./deploy/oracle/logs-all.sh api caddy         # follow selected logs
+./deploy/oracle/restart-all.sh                # restart without rebuilding
+./deploy/oracle/reload-all.sh                 # rebuild/recreate app and edge
+./deploy/oracle/stop-all.sh                   # stop without deleting data
+```
+
+`start-all.sh` starts and enables Docker when needed. `stop-all.sh` leaves the
+Docker engine running so unrelated containers are unaffected. On a dedicated
+VM, use `gnkalgo-control.sh engine-stop` after stopping GnKAlgo, and use
+`gnkalgo-control.sh engine-start` to start Docker again. Never run
+`docker compose down -v` in production because it deletes named data volumes.
+Set `TAIL_LINES` to change the default 200-line log history.
+
 ## API map
 
 - Auth: `/api/v1/auth/register`, `verify-email`, `login`, `refresh`, `logout`, `logout-all`, `forgot-password`, `reset-password`, `mfa/setup`, `mfa/verify`, `mfa/disable`
