@@ -193,8 +193,26 @@ class MarketWsTicketOut(BaseModel):
     ticket: str
     expires_in: int
 
+class MarketFeedHealthOut(BaseModel):
+    provider: str
+    state: str
+    healthy: bool
+    stale: bool
+    subscription_count: int
+    connected_at: datetime | None = None
+    disconnected_at: datetime | None = None
+    last_tick_at: datetime | None = None
+    last_exchange_timestamp: datetime | None = None
+    quote_latency_ms: float | None = None
+    tick_count: int = 0
+    reconnect_count: int = 0
+    decode_errors: int = 0
+    last_error: str | None = None
+    updated_at: datetime | None = None
+
 class MarketStatusOut(BaseModel):
     provider: str
     redis_connected: bool
     active_clients: int
     active_subscriptions: int
+    feed: MarketFeedHealthOut

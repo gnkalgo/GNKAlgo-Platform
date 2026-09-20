@@ -76,7 +76,7 @@ def candles(instrument_id: str, interval_seconds: int, start_at: str | None = No
 
 @router.get("/status", response_model=MarketStatusOut)
 async def status(principal: Principal = Depends(_market_principal)):
-    return await market_bus.status()
+    return await market_bus.status(principal.user.id)
 
 
 @router.post("/ws-ticket", response_model=MarketWsTicketOut, status_code=201)

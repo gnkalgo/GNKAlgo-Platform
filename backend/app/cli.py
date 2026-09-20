@@ -5,6 +5,7 @@ from pathlib import Path
 from sqlalchemy import select
 from .database import SessionLocal
 from .models import Instrument, Role, User
+from .market.instruments import import_dhan_instruments
 from .security import hash_password, validate_password
 
 def create_admin(email: str) -> None:
@@ -56,8 +57,12 @@ def main():
     sub = parser.add_subparsers(dest="command", required=True)
     admin = sub.add_parser("create-admin"); admin.add_argument("email")
     instruments = sub.add_parser("import-instruments"); instruments.add_argument("csv_file")
+    dhan_instruments = sub.add_parser("import-dhan-instruments"); dhan_instruments.add_argument("csv_file")
     args = parser.parse_args()
     if args.command == "create-admin": create_admin(args.email)
     elif args.command == "import-instruments": import_instruments(args.csv_file)
+    elif args.command == "import-dhan-instruments":
+        created, updated, skipped = import_dhan_instruments(args.csv_file)
+        print(f"Dhan instruments: {created} created, {updated} updated, {skipped} skipped")
 
 if __name__ == "__main__": main()

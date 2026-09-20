@@ -41,6 +41,8 @@ class Settings(BaseSettings):
     market_ws_ticket_seconds: int = 30
     market_max_subscriptions: int = 200
     market_quote_ttl_seconds: int = 30
+    market_feed_health_ttl_seconds: int = Field(default=300, ge=30)
+    market_stale_after_seconds: float = Field(default=15.0, gt=0)
     market_redis_prefix: str = "gnk:market"
     market_feed_provider: Literal["disabled", "simulated", "dhan", "broker"] = "disabled"
     market_simulated_interval_seconds: float = 1.0

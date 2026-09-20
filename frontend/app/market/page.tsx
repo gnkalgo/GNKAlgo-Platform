@@ -7,11 +7,13 @@ import {api, marketWebSocketUrl} from "@/lib/api";
 type Instrument={id:string;exchange:string;segment:string;trading_symbol:string;name:string|null;instrument_type:string};
 type Quote={instrument_id:string;ltp:number;previous_close:number|null;bid:number|null;ask:number|null;source:string;stale:boolean};
 type Ticket={ticket:string;expires_in:number};
+type MarketStatus={provider:string;redis_connected:boolean;active_subscriptions:number;feed:{state:string;healthy:boolean;stale:boolean;quote_latency_ms:number|null;reconnect_count:number;decode_errors:number;last_tick_at:string|null;last_error:string|null}};
 
 export default function MarketData(){
   const [query,setQuery]=useState(""); const [results,setResults]=useState<Instrument[]>([]);
   const [watch,setWatch]=useState<Instrument[]>([]); const [quotes,setQuotes]=useState<Record<string,Quote>>({});
   const [connected,setConnected]=useState(false); const [error,setError]=useState("");
+  const [status,setStatus]=useState<MarketStatus|null>(null);
   const socket=useRef<WebSocket|null>(null); const watchRef=useRef<Instrument[]>([]);
   useEffect(()=>{watchRef.current=watch},[watch]);
   useEffect(()=>{
@@ -26,12 +28,14 @@ export default function MarketData(){
     }catch(e){setError((e as Error).message);if(!stopped){const delay=Math.min(30000,1000*2**attempt++);retry=setTimeout(connect,delay)}}};
     connect();return()=>{stopped=true;if(heartbeat)clearInterval(heartbeat);if(retry)clearTimeout(retry);socket.current?.close()};
   },[]);
+  useEffect(()=>{let stopped=false;const refresh=async()=>{try{const value=await api<MarketStatus>("/market/status");if(!stopped)setStatus(value)}catch{/* WebSocket status remains authoritative for the browser connection. */}};refresh();const timer=setInterval(refresh,10000);return()=>{stopped=true;clearInterval(timer)}},[]);
   async function search(e:FormEvent){e.preventDefault();setError("");try{setResults(await api<Instrument[]>(`/market/instruments?query=${encodeURIComponent(query)}&limit=25`))}catch(e){setError((e as Error).message)}}
   function add(item:Instrument){if(watch.some(x=>x.id===item.id))return;setWatch(old=>[...old,item]);socket.current?.send(JSON.stringify({action:"subscribe",instrument_ids:[item.id],mode:"quote"}))}
   function remove(item:Instrument){setWatch(old=>old.filter(x=>x.id!==item.id));socket.current?.send(JSON.stringify({action:"unsubscribe",instrument_ids:[item.id]}))}
   function change(quote?:Quote){if(!quote?.previous_close)return "—";return `${(((quote.ltp-quote.previous_close)/quote.previous_close)*100).toFixed(2)}%`}
+  const feedOk=connected&&(!status||status.feed.healthy);
   return <AppShell title="Market data" kicker="PHASE 6 / LIVE FEED">
-    <div className="card"><div className="card-head"><div><span className="eyebrow">STREAM STATUS</span><h3>{connected?"Connected":"Connecting…"}</h3></div><span className={`badge ${connected?"":"disconnected"}`}>{connected?"LIVE":"OFFLINE"}</span></div>
+    <div className="card"><div className="card-head"><div><span className="eyebrow">STREAM STATUS</span><h3>{status?.feed.stale?"Feed stale":connected?"Connected":"Connecting…"}</h3><span className="muted">{status?`${status.provider.toUpperCase()} · ${status.feed.state} · ${status.feed.quote_latency_ms===null?"no ticks":`${status.feed.quote_latency_ms.toFixed(0)} ms`} · ${status.feed.reconnect_count} reconnects`:"Loading feed health…"}</span></div><span className={`badge ${feedOk?"":"disconnected"}`}>{feedOk?"LIVE":"OFFLINE"}</span></div>
       <form className="market-search" onSubmit={search}><input aria-label="Search instruments" placeholder="Search symbol or company" value={query} onChange={e=>setQuery(e.target.value)}/><button className="btn">Search</button></form>
       {!!results.length&&<div className="market-results">{results.map(item=><button key={item.id} onClick={()=>add(item)}><strong>{item.trading_symbol}</strong><span>{item.exchange} · {item.segment} · {item.name??item.instrument_type}</span></button>)}</div>}
     </div>{error&&<Notice tone="error">{error}</Notice>}

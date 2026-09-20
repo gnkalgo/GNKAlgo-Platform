@@ -200,11 +200,13 @@ def decode_dhan_frames(data: bytes) -> list[dict[str, Any]]:
 
 PacketCallback = Callable[[str, DhanSubscription, dict[str, Any]], Awaitable[None]]
 FatalCallback = Callable[[str, int], Awaitable[None]]
+HealthCallback = Callable[[str, str, dict[str, Any]], Awaitable[None]]
 
 
 class DhanFeedSession:
     def __init__(self, user_id: str, client_id: str, access_token: str, request_code: int,
-                 reconnect_max_seconds: float, on_packet: PacketCallback, on_fatal: FatalCallback):
+                 reconnect_max_seconds: float, on_packet: PacketCallback, on_fatal: FatalCallback,
+                 on_health: HealthCallback | None = None):
         self.user_id = user_id
         self.client_id = client_id
         self.access_token = access_token
@@ -212,10 +214,15 @@ class DhanFeedSession:
         self.reconnect_max_seconds = reconnect_max_seconds
         self.on_packet = on_packet
         self.on_fatal = on_fatal
+        self.on_health = on_health
         self._desired: dict[tuple[int, str], DhanSubscription] = {}
         self._partial: dict[tuple[int, str], dict[str, Any]] = {}
         self._changed = asyncio.Event()
         self._stopping = asyncio.Event()
+
+    async def _emit_health(self, state: str, **details: Any) -> None:
+        if self.on_health:
+            await self.on_health(self.user_id, state, details)
 
     def replace_subscriptions(self, subscriptions: Iterable[DhanSubscription]) -> None:
         self._desired = {item.key: item for item in subscriptions}
@@ -272,6 +279,7 @@ class DhanFeedSession:
         delay = 1.0
         while not self._stopping.is_set():
             try:
+                await self._emit_health("connecting")
                 try:
                     import websockets
                 except ImportError as exc:
@@ -281,6 +289,7 @@ class DhanFeedSession:
                 async with websockets.connect(f"{DHAN_FEED_URL}?{query}", ping_interval=10, ping_timeout=40,
                                               close_timeout=5, max_size=2**20) as websocket:
                     logger.info("Dhan feed connected", extra={"user_id": self.user_id})
+                    await self._emit_health("connected", connected_at=datetime.now(timezone.utc), last_error="")
                     delay = 1.0
                     await self._connected(websocket)
             except asyncio.CancelledError:
@@ -289,8 +298,14 @@ class DhanFeedSession:
                 if exc.code in {806, 807, 808, 809}:
                     await self.on_fatal(self.user_id, exc.code)
                     return
+                await self._emit_health("reconnecting", reconnect_delta=1,
+                                        disconnected_at=datetime.now(timezone.utc), last_error=f"DHAN_FEED_{exc.code}")
                 logger.warning("Dhan feed rejected session", extra={"user_id": self.user_id, "code": exc.code})
             except Exception as exc:
+                await self._emit_health("reconnecting", reconnect_delta=1,
+                                        decode_error_delta=int(isinstance(exc, DhanProtocolError)),
+                                        disconnected_at=datetime.now(timezone.utc),
+                                        last_error=type(exc).__name__)
                 logger.warning("Dhan feed connection interrupted", extra={"user_id": self.user_id,
                                                                            "error_type": type(exc).__name__})
             if not self._stopping.is_set():
@@ -306,6 +321,11 @@ class DhanFeedSupervisor:
         self.reconnect_max_seconds = reconnect_max_seconds
         self.poll_seconds = poll_seconds
         self._sessions: dict[str, tuple[str, DhanFeedSession, asyncio.Task]] = {}
+        self._subscriptions_by_user: dict[str, set[str]] = {}
+        self._stale_alerted: set[str] = set()
+
+    async def _health(self, user_id: str, state: str, details: dict[str, Any]) -> None:
+        await market_bus.update_feed_health(user_id, state=state, **details)
 
     async def _fatal(self, user_id: str, code: int) -> None:
         with SessionLocal() as db:
@@ -315,6 +335,10 @@ class DhanFeedSupervisor:
                 connection.status = BrokerStatus.REAUTH_REQUIRED if code in {807, 808, 809} else BrokerStatus.ERROR
                 connection.error_code = f"DHAN_FEED_{code}"
                 db.commit()
+        await market_bus.update_feed_health(
+            user_id, state="reauth_required" if code in {807, 808, 809} else "error",
+            disconnected_at=datetime.now(timezone.utc), last_error=f"DHAN_FEED_{code}",
+        )
 
     @staticmethod
     def _expired(connection: BrokerConnection) -> bool:
@@ -364,13 +388,17 @@ class DhanFeedSupervisor:
         grouped: dict[str, set[str]] = defaultdict(set)
         for user_id, instrument_id in await market_bus.active_subscriptions():
             grouped[user_id].add(instrument_id)
+        self._subscriptions_by_user = dict(grouped)
         for user_id in set(self._sessions) - set(grouped):
             _, session, task = self._sessions.pop(user_id)
             session.stop()
             task.cancel()
+            await market_bus.update_feed_health(user_id, state="idle", subscription_count=0, last_error="")
         for user_id, instrument_ids in grouped.items():
             loaded = self._load_user(user_id, instrument_ids)
             if loaded is None:
+                await market_bus.update_feed_health(user_id, state="awaiting_credentials",
+                                                    subscription_count=len(instrument_ids))
                 existing = self._sessions.pop(user_id, None)
                 if existing:
                     existing[1].stop()
@@ -379,6 +407,8 @@ class DhanFeedSupervisor:
             fingerprint, client_id, access_token, subscriptions = loaded
             current = self._sessions.get(user_id)
             if not subscriptions:
+                await market_bus.update_feed_health(user_id, state="instrument_error",
+                                                    subscription_count=0, last_error="NO_VALID_DHAN_INSTRUMENTS")
                 if current:
                     current[1].stop()
                     current[2].cancel()
@@ -391,17 +421,29 @@ class DhanFeedSupervisor:
                 current = None
             if current is None:
                 session = DhanFeedSession(user_id, client_id, access_token, self.request_code,
-                    self.reconnect_max_seconds, self.on_packet, self._fatal)
+                    self.reconnect_max_seconds, self.on_packet, self._fatal, self._health)
                 task = asyncio.create_task(session.run(), name=f"dhan-feed-{user_id}")
                 self._sessions[user_id] = (fingerprint, session, task)
                 current = self._sessions[user_id]
             current[1].replace_subscriptions(subscriptions)
+            await market_bus.update_feed_health(user_id, subscription_count=len(subscriptions))
+
+    async def _alert_on_stale_feeds(self) -> None:
+        for user_id, instrument_ids in self._subscriptions_by_user.items():
+            health = await market_bus.feed_health(user_id, len(instrument_ids))
+            if health["stale"] and user_id not in self._stale_alerted:
+                logger.error("Dhan feed is stale", extra={"user_id": user_id,
+                                                          "last_tick_at": health["last_tick_at"]})
+                self._stale_alerted.add(user_id)
+            elif not health["stale"]:
+                self._stale_alerted.discard(user_id)
 
     async def run(self, stopping: asyncio.Event) -> None:
         try:
             while not stopping.is_set():
                 try:
                     await self.reconcile()
+                    await self._alert_on_stale_feeds()
                 except Exception:
                     logger.exception("Dhan subscription reconciliation failed")
                 try:

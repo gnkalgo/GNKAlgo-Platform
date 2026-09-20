@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 from fastapi.websockets import WebSocketDisconnect
 
@@ -47,6 +47,45 @@ def test_latest_quotes_are_tenant_scoped(client, db):
     second_response = client.get(f"/api/v1/market/quotes?instrument_ids={row.id}", headers=auth(second))
     assert first_response.json()[0]["ltp"] == 812.25
     assert second_response.json() == []
+
+
+def test_market_health_is_tenant_scoped_and_reports_live_ticks(client, db, monkeypatch):
+    import asyncio
+    row = instrument(db)
+    first = user_token(client, "health-first@example.com")
+    second = user_token(client, "health-second@example.com")
+    first_user = client.get("/api/v1/users/me", headers=auth(first)).json()["id"]
+    monkeypatch.setattr(market_bus.settings, "market_feed_provider", "dhan")
+    asyncio.run(market_bus.replace_subscriptions(first_user, "health-client", {row.id}))
+    asyncio.run(market_bus.update_feed_health(first_user, state="connected", reconnect_delta=2))
+    asyncio.run(market_bus.publish(first_user, quote(row)))
+
+    first_status = client.get("/api/v1/market/status", headers=auth(first)).json()
+    second_status = client.get("/api/v1/market/status", headers=auth(second)).json()
+
+    assert first_status["active_subscriptions"] == 1
+    assert first_status["feed"]["state"] == "connected"
+    assert first_status["feed"]["healthy"] is True
+    assert first_status["feed"]["last_tick_at"]
+    assert first_status["feed"]["reconnect_count"] == 2
+    assert second_status["active_subscriptions"] == 0
+    assert second_status["feed"]["state"] == "idle"
+
+
+def test_market_health_marks_an_active_silent_feed_stale(monkeypatch):
+    import asyncio
+    monkeypatch.setattr(market_bus.settings, "market_feed_provider", "dhan")
+    monkeypatch.setattr(market_bus.settings, "market_stale_after_seconds", 5.0)
+    market_bus._health["stale-user"] = {
+        "state": "connected",
+        "connected_at": (datetime.now(timezone.utc) - timedelta(seconds=10)).isoformat(),
+        "reconnect_count": 0,
+        "decode_errors": 0,
+    }
+    health = asyncio.run(market_bus.feed_health("stale-user", 1))
+    assert health["state"] == "degraded"
+    assert health["stale"] is True
+    assert health["healthy"] is False
 
 
 def test_market_api_key_scope_is_enforced(client, db):

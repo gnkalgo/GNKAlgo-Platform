@@ -2,6 +2,8 @@
 
 Phase 6 adds a read-only, tenant-isolated market-data plane to the existing identity and broker platform. Trading remains disabled.
 
+Production acceptance and observability are specified in [PHASE-6.2.md](PHASE-6.2.md).
+
 ## Components
 
 - `app.market.contracts`: versioned normalized quote and subscription contracts
@@ -24,6 +26,8 @@ Phase 6 adds a read-only, tenant-isolated market-data plane to the existing iden
 
 REST and WebSocket ticket creation accept an interactive JWT or a GnKAlgo API key with `market:read`. WebSocket tickets expire after 30 seconds and are consumed on first use. Redis keys and candle rows include the owning user ID; one user's feed is never fanned out to another user.
 
+The status response is tenant-scoped and includes connection state, stale detection, last tick and exchange timestamps, quote latency, reconnects and decode errors.
+
 ## Instrument master
 
 Apply migrations and import the broker-independent instrument map:
@@ -31,6 +35,7 @@ Apply migrations and import the broker-independent instrument map:
 ```bash
 alembic upgrade head
 python -m app.cli import-instruments market-instruments.example.csv
+python -m app.cli import-dhan-instruments api-scrip-master-detailed.csv
 ```
 
 The importer upserts instruments by exchange, segment and canonical symbol. Provider subscription identifiers live in the `broker_tokens` JSON object and are never accepted directly from a browser.
