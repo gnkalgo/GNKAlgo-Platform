@@ -53,6 +53,11 @@ class Settings(BaseSettings):
     def split_origins(cls, value):
         return [x.strip() for x in value.split(",") if x.strip()] if isinstance(value, str) else value
 
+    @field_validator("dhan_market_request_code", mode="before")
+    @classmethod
+    def parse_dhan_market_request_code(cls, value):
+        return int(value) if isinstance(value, str) else value
+
     def validate_production(self) -> None:
         if self.environment != "production":
             return
