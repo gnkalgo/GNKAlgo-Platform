@@ -3,10 +3,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from .config import get_settings
-from .routers import admin, api_keys, auth, brokers, market, sessions, users
+from .routers import admin, api_keys, auth, brokers, market, sessions, trading, users
 
 settings = get_settings()
-app = FastAPI(title="GnKAlgo API", version="0.6.0", docs_url="/docs" if settings.environment != "production" else None, redoc_url=None)
+app = FastAPI(title="GnKAlgo API", version="0.7.2", docs_url="/docs" if settings.environment != "production" else None, redoc_url=None)
 app.add_middleware(CORSMiddleware, allow_origins=settings.cors_origins, allow_credentials=True, allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"], allow_headers=["Authorization", "Content-Type", "X-GnK-API-Key"])
 
 class SecurityHeadersMiddleware(BaseHTTPMiddleware):
@@ -20,7 +20,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 app.add_middleware(SecurityHeadersMiddleware)
-for router in (auth.router, users.router, sessions.router, brokers.router, api_keys.router, market.router, admin.router): app.include_router(router, prefix="/api/v1")
+for router in (auth.router, users.router, sessions.router, brokers.router, api_keys.router, market.router, trading.router, admin.router): app.include_router(router, prefix="/api/v1")
 
 @app.get("/health", tags=["system"])
-def health(): return {"status": "ok", "phase": 6, "trading_enabled": False, "market_data_enabled": settings.market_feed_provider != "disabled"}
+def health(): return {"status": "ok", "phase": "7.2", "trading_enabled": settings.trading_mode != "disabled", "trading_mode": settings.trading_mode, "market_data_enabled": settings.market_feed_provider != "disabled"}

@@ -41,6 +41,19 @@ services:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
     restart: unless-stopped
+  order-reconciler:
+    build: ./backend
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://gnkalgo:${POSTGRES_PASSWORD}@postgres:5432/gnkalgo
+      REDIS_URL: redis://redis:6379/0
+    command: ["python", "-m", "app.trading.reconcile"]
+    depends_on:
+      api: {condition: service_started}
+      postgres: {condition: service_healthy}
+    restart: unless-stopped
   web:
     build:
       context: ./frontend

@@ -49,6 +49,15 @@ class Settings(BaseSettings):
     market_candle_intervals: str = "60,300,900,3600,86400"
     dhan_market_request_code: Literal[15, 17, 21] = 17
     dhan_market_reconnect_max_seconds: float = 30.0
+    trading_mode: Literal["disabled", "paper", "live"] = "disabled"
+    trading_live_confirmation: str = ""
+    dhan_static_ip_confirmed: bool = False
+    trading_max_order_quantity: int = Field(default=1000, ge=1)
+    trading_max_order_notional: float = Field(default=500_000, gt=0)
+    trading_max_open_orders: int = Field(default=20, ge=1)
+    trading_max_absolute_position: int = Field(default=5000, ge=1)
+    paper_slippage_bps: float = Field(default=2.0, ge=0, le=100)
+    dhan_order_reconcile_seconds: float = Field(default=5.0, ge=1)
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -79,6 +88,11 @@ class Settings(BaseSettings):
             raise RuntimeError("SMTP_HOST is required in production")
         if self.market_feed_provider == "simulated":
             raise RuntimeError("MARKET_FEED_PROVIDER=simulated is not permitted in production")
+        if self.trading_mode == "live":
+            if self.trading_live_confirmation != "ENABLE_DHAN_LIVE_ORDERS":
+                raise RuntimeError("TRADING_LIVE_CONFIRMATION must explicitly enable Dhan live orders")
+            if not self.dhan_static_ip_confirmed:
+                raise RuntimeError("DHAN_STATIC_IP_CONFIRMED must be true for live order APIs")
 
     @property
     def candle_intervals(self) -> tuple[int, ...]:

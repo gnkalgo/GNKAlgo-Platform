@@ -1,8 +1,10 @@
-# GnKAlgo — Phase 1, Phase 2 and Phase 6 Market Data Foundation
+# GnKAlgo — Identity, Market Data and Phase 7.2 Order Execution
 
 Production-oriented identity, broker connection, and scoped API-credential foundation for GnKAlgo. The attached GnKAlgo artwork is used as the application brand asset.
 
 Phase 6 adds tenant-isolated market-data contracts, Redis fan-out, an instrument master, candle aggregation, authenticated WebSockets, a dedicated worker, a watchlist UI, and a credential-gated Dhan v2 live-feed runner. See [PHASE-6.md](PHASE-6.md) and the [Phase 6.2 production-acceptance runbook](PHASE-6.2.md). Live data remains disabled by default until production entitlement and soak acceptance pass.
+
+Phase 7.1 adds deterministic paper execution and acceptance gates. Phase 7.2 adds explicitly gated Dhan live placement, modification, cancellation, broker order/trade-book reconciliation, positions, risk limits and kill switches. See the [Phase 7.2 acceptance and deployment runbook](PHASE-7.2.md). Live order execution remains disabled by default.
 
 ## What is implemented
 
@@ -143,6 +145,7 @@ specific temporary-service error if SMTP cannot deliver the verification email.
 - Brokers: `/api/v1/brokers`, `/{broker}/connect`, `/{broker}/callback`, `/{id}`, `/{id}/test`, `/{id}/reconnect`
 - API keys: `/api/v1/api-keys`, `/{id}`, `/{id}/rotate`, `/{id}/revoke`, and scoped validation example `/validate/profile`
 - Market data: `/api/v1/market/instruments`, `/quotes`, `/candles`, `/status`, `/ws-ticket`, and WebSocket `/stream`
+- Trading: `/api/v1/trading/status`, `/orders`, `/orders/{id}`, `/orders/{id}/cancel`, `/executions`, `/positions`, and `/kill-switch`
 - Admin: `/api/v1/admin/users`, `/admin/users/{id}`, `/admin/audit`
 
 FastAPI OpenAPI is available at `/docs` outside production.

@@ -40,6 +40,35 @@ class ApiKeyStatus(str, enum.Enum):
     REVOKED = "REVOKED"
     EXPIRED = "EXPIRED"
 
+class OrderSide(str, enum.Enum):
+    BUY = "BUY"
+    SELL = "SELL"
+
+class OrderType(str, enum.Enum):
+    MARKET = "MARKET"
+    LIMIT = "LIMIT"
+
+class OrderStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    OPEN = "OPEN"
+    PARTIALLY_FILLED = "PARTIALLY_FILLED"
+    FILLED = "FILLED"
+    CANCEL_PENDING = "CANCEL_PENDING"
+    CANCELED = "CANCELED"
+    REJECTED = "REJECTED"
+    EXPIRED = "EXPIRED"
+    UNKNOWN = "UNKNOWN"
+
+class ProductType(str, enum.Enum):
+    CNC = "CNC"
+    INTRADAY = "INTRADAY"
+    MARGIN = "MARGIN"
+    MTF = "MTF"
+
+class OrderValidity(str, enum.Enum):
+    DAY = "DAY"
+    IOC = "IOC"
+
 class User(Base):
     __tablename__ = "users"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
@@ -192,3 +221,79 @@ class MarketWsTicket(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
     used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+class TradingOrder(Base):
+    """Tenant-owned paper or live order with idempotent client correlation."""
+    __tablename__ = "trading_orders"
+    __table_args__ = (
+        UniqueConstraint("user_id", "client_order_id", name="uq_trading_order_client_id"),
+        Index("ix_trading_order_user_status", "user_id", "status", "created_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    instrument_id: Mapped[str] = mapped_column(ForeignKey("instruments.id", ondelete="RESTRICT"), index=True)
+    broker_connection_id: Mapped[str | None] = mapped_column(ForeignKey("broker_connections.id", ondelete="SET NULL"), index=True)
+    client_order_id: Mapped[str] = mapped_column(String(30))
+    broker_order_id: Mapped[str | None] = mapped_column(String(80), index=True)
+    mode: Mapped[str] = mapped_column(String(12), index=True)
+    side: Mapped[OrderSide] = mapped_column(Enum(OrderSide))
+    order_type: Mapped[OrderType] = mapped_column(Enum(OrderType))
+    product_type: Mapped[ProductType] = mapped_column(Enum(ProductType))
+    validity: Mapped[OrderValidity] = mapped_column(Enum(OrderValidity))
+    quantity: Mapped[int] = mapped_column(Integer)
+    filled_quantity: Mapped[int] = mapped_column(Integer, default=0)
+    limit_price: Mapped[float | None] = mapped_column(Float)
+    trigger_price: Mapped[float | None] = mapped_column(Float)
+    average_fill_price: Mapped[float | None] = mapped_column(Float)
+    status: Mapped[OrderStatus] = mapped_column(Enum(OrderStatus), default=OrderStatus.PENDING, index=True)
+    rejection_reason: Mapped[str | None] = mapped_column(String(120))
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    submitted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+class TradeExecution(Base):
+    __tablename__ = "trade_executions"
+    __table_args__ = (
+        UniqueConstraint("user_id", "broker_execution_id", name="uq_trade_execution_broker_id"),
+        Index("ix_trade_execution_user_time", "user_id", "executed_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    order_id: Mapped[str] = mapped_column(ForeignKey("trading_orders.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    instrument_id: Mapped[str] = mapped_column(ForeignKey("instruments.id", ondelete="RESTRICT"), index=True)
+    broker_execution_id: Mapped[str | None] = mapped_column(String(120))
+    mode: Mapped[str] = mapped_column(String(12), index=True)
+    side: Mapped[OrderSide] = mapped_column(Enum(OrderSide))
+    quantity: Mapped[int] = mapped_column(Integer)
+    price: Mapped[float] = mapped_column(Float)
+    source: Mapped[str] = mapped_column(String(24))
+    executed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+class TradingPosition(Base):
+    __tablename__ = "trading_positions"
+    __table_args__ = (
+        UniqueConstraint("user_id", "instrument_id", "mode", "product_type", name="uq_trading_position"),
+        Index("ix_trading_position_user_mode", "user_id", "mode"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    instrument_id: Mapped[str] = mapped_column(ForeignKey("instruments.id", ondelete="RESTRICT"), index=True)
+    mode: Mapped[str] = mapped_column(String(12), index=True)
+    product_type: Mapped[ProductType] = mapped_column(Enum(ProductType))
+    quantity: Mapped[int] = mapped_column(Integer, default=0)
+    average_price: Mapped[float] = mapped_column(Float, default=0)
+    realized_pnl: Mapped[float] = mapped_column(Float, default=0)
+    last_price: Mapped[float | None] = mapped_column(Float)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+class TradingControl(Base):
+    __tablename__ = "trading_controls"
+    scope_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), unique=True, index=True)
+    is_halted: Mapped[bool] = mapped_column(Boolean, default=False)
+    reason: Mapped[str | None] = mapped_column(String(255))
+    updated_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

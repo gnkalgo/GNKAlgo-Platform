@@ -20,6 +20,7 @@ from .candles import CandleAggregator
 from .contracts import NormalizedQuote
 from .adapters import DhanV2Adapter
 from .dhan import DhanFeedSupervisor, DhanSubscription
+from ..trading.engine import PaperTradingEngine
 
 logger = logging.getLogger("gnkalgo.market.worker")
 
@@ -28,6 +29,7 @@ class MarketWorker:
     def __init__(self) -> None:
         self.settings = get_settings()
         self.candles = CandleAggregator()
+        self.paper = PaperTradingEngine()
         self.sequences: dict[tuple[str, str], int] = defaultdict(int)
         self._stopping = asyncio.Event()
 
@@ -60,6 +62,8 @@ class MarketWorker:
         await market_bus.publish(user_id, quote)
         with SessionLocal() as db:
             self.candles.ingest(db, user_id, quote)
+            if self.settings.trading_mode == "paper":
+                self.paper.process_quote(db, user_id, quote)
 
     async def _simulate_once(self) -> None:
         subscriptions = await market_bus.active_subscriptions()
@@ -82,6 +86,8 @@ class MarketWorker:
                     previous_close=float(base), volume=float(sequence * 10), bid=max(0.01, price - 0.05), ask=price + 0.05)
                 await market_bus.publish(user_id, quote)
                 self.candles.ingest(db, user_id, quote)
+                if self.settings.trading_mode == "paper":
+                    self.paper.process_quote(db, user_id, quote)
 
 
 async def main() -> None:

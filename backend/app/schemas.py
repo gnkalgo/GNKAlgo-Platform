@@ -1,6 +1,6 @@
 from datetime import datetime
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
-from .models import ApiKeyStatus, BrokerName, BrokerStatus, Role
+from .models import ApiKeyStatus, BrokerName, BrokerStatus, OrderSide, OrderStatus, OrderType, OrderValidity, ProductType, Role
 
 class ORMModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -216,3 +216,88 @@ class MarketStatusOut(BaseModel):
     active_clients: int
     active_subscriptions: int
     feed: MarketFeedHealthOut
+
+class OrderCreate(BaseModel):
+    instrument_id: str
+    client_order_id: str = Field(min_length=1, max_length=30, pattern=r"^[A-Za-z0-9_-]+$")
+    side: OrderSide
+    order_type: OrderType
+    product_type: ProductType = ProductType.INTRADAY
+    validity: OrderValidity = OrderValidity.DAY
+    quantity: int = Field(ge=1)
+    limit_price: float | None = Field(default=None, gt=0)
+    trigger_price: float | None = Field(default=None, ge=0)
+
+    @model_validator(mode="after")
+    def validate_prices(self):
+        if self.order_type == OrderType.LIMIT and self.limit_price is None:
+            raise ValueError("limit_price is required for LIMIT orders")
+        if self.order_type == OrderType.MARKET and self.limit_price is not None:
+            raise ValueError("limit_price is not allowed for MARKET orders")
+        return self
+
+class OrderModify(BaseModel):
+    quantity: int = Field(ge=1)
+    limit_price: float = Field(gt=0)
+
+class TradingOrderOut(ORMModel):
+    id: str
+    instrument_id: str
+    client_order_id: str
+    broker_order_id: str | None
+    mode: str
+    side: OrderSide
+    order_type: OrderType
+    product_type: ProductType
+    validity: OrderValidity
+    quantity: int
+    filled_quantity: int
+    limit_price: float | None
+    trigger_price: float | None
+    average_fill_price: float | None
+    status: OrderStatus
+    rejection_reason: str | None
+    version: int
+    submitted_at: datetime | None
+    completed_at: datetime | None
+    created_at: datetime
+    updated_at: datetime
+
+class TradeExecutionOut(ORMModel):
+    id: str
+    order_id: str
+    instrument_id: str
+    broker_execution_id: str | None
+    mode: str
+    side: OrderSide
+    quantity: int
+    price: float
+    source: str
+    executed_at: datetime
+
+class TradingPositionOut(ORMModel):
+    id: str
+    instrument_id: str
+    mode: str
+    product_type: ProductType
+    quantity: int
+    average_price: float
+    realized_pnl: float
+    last_price: float | None
+    unrealized_pnl: float = 0
+    updated_at: datetime
+
+class TradingStatusOut(BaseModel):
+    mode: str
+    live_ready: bool
+    halted: bool
+    halt_reason: str | None = None
+    limits: dict[str, float | int]
+
+class KillSwitchRequest(BaseModel):
+    halted: bool
+    reason: str | None = Field(default=None, max_length=255)
+
+class KillSwitchOut(BaseModel):
+    halted: bool
+    reason: str | None
