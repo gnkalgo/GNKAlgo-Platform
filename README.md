@@ -120,6 +120,20 @@ VM, use `gnkalgo-control.sh engine-stop` after stopping GnKAlgo, and use
 `docker compose down -v` in production because it deletes named data volumes.
 Set `TAIL_LINES` to change the default 200-line log history.
 
+If startup reports `FIELD_ENCRYPTION_KEY must be a valid Fernet key` on a new
+deployment, repair it and recreate the application services:
+
+```bash
+./deploy/oracle/repair-encryption-key.sh
+./deploy/oracle/reload-all.sh
+./deploy/oracle/logs-all.sh api
+```
+
+The repair script makes a mode-preserving `.env.backup.TIMESTAMP` copy. Do not
+rotate this key after saving broker credentials; existing encrypted credentials
+would become unreadable. Registration now rolls back cleanly and returns a
+specific temporary-service error if SMTP cannot deliver the verification email.
+
 ## API map
 
 - Auth: `/api/v1/auth/register`, `verify-email`, `login`, `refresh`, `logout`, `logout-all`, `forgot-password`, `reset-password`, `mfa/setup`, `mfa/verify`, `mfa/disable`

@@ -8,7 +8,7 @@ from ..config import get_settings
 from ..database import get_db
 from ..dependencies import Principal, get_principal, require_session
 from ..models import OneTimeToken, User, UserSession
-from ..mailer import send_password_reset, send_verification
+from ..mailer import MailDeliveryError, send_password_reset, send_verification
 from ..rate_limit import limit_login, limit_sensitive
 from ..schemas import ForgotPasswordRequest, LoginRequest, Message, MFADisableRequest, MFAEnabledOut, MFASetupOut, MFAVerifyRequest, RefreshRequest, RegisterRequest, RegisterResponse, ResetPasswordRequest, TokenPair, TokenRequest
 from ..security import consume_recovery_code, create_access_token, decrypt_text, encrypt_text, hash_password, hash_token, new_one_time_token, new_recovery_codes, new_refresh_token, new_totp_secret, parse_refresh_token, utcnow, validate_password, verify_password, verify_totp
@@ -41,8 +41,12 @@ def register(payload: RegisterRequest, request: Request, db: Session = Depends(g
     raw, digest = new_one_time_token()
     db.add(OneTimeToken(user_id=user.id, purpose="VERIFY_EMAIL", token_hash=digest, expires_at=utcnow() + timedelta(hours=settings.verification_token_hours)))
     audit(db, "USER_REGISTERED", user.id, request)
-    db.commit()
-    send_verification(user.email, raw)
+    try:
+        send_verification(user.email, raw)
+        db.commit()
+    except MailDeliveryError as exc:
+        db.rollback()
+        raise HTTPException(status_code=503, detail="Verification email is temporarily unavailable. Please try again shortly.") from exc
     return RegisterResponse(message="Registration accepted. Check your email to verify the account.", verification_token=raw if settings.expose_dev_tokens else None)
 
 @router.post("/verify-email", response_model=Message)
@@ -114,8 +118,13 @@ def forgot(payload: ForgotPasswordRequest, request: Request, db: Session = Depen
     if user:
         raw, digest = new_one_time_token()
         db.add(OneTimeToken(user_id=user.id, purpose="RESET_PASSWORD", token_hash=digest, expires_at=utcnow() + timedelta(minutes=settings.reset_token_minutes)))
-        audit(db, "PASSWORD_RESET_REQUESTED", user.id, request); db.commit()
-        send_password_reset(user.email, raw)
+        audit(db, "PASSWORD_RESET_REQUESTED", user.id, request)
+        try:
+            send_password_reset(user.email, raw)
+            db.commit()
+        except MailDeliveryError:
+            db.rollback()
+            raw = None
     return RegisterResponse(message="If the account exists, a reset link has been sent.", verification_token=raw if raw and settings.expose_dev_tokens else None)
 
 @router.post("/reset-password", response_model=Message)

@@ -17,6 +17,23 @@ def test_registration_verification_login_refresh_and_logout(client, db):
     assert client.get("/api/v1/users/me", headers=auth(tokens["access_token"])).status_code == 401
     assert db.scalar(select(AuditLog).where(AuditLog.event == "REFRESH_TOKEN_REUSE_DETECTED"))
 
+def test_registration_rolls_back_when_verification_email_fails(client, db, monkeypatch):
+    from app.mailer import MailDeliveryError
+
+    def fail_delivery(*_args, **_kwargs):
+        raise MailDeliveryError("SMTP delivery failed")
+
+    monkeypatch.setattr("app.routers.auth.send_verification", fail_delivery)
+    response = client.post("/api/v1/auth/register", json={
+        "email": "smtp-failure@example.com",
+        "password": "StrongPass!123",
+        "password_confirmation": "StrongPass!123",
+    })
+
+    assert response.status_code == 503
+    assert response.json()["detail"] == "Verification email is temporarily unavailable. Please try again shortly."
+    assert db.scalar(select(User).where(User.email == "smtp-failure@example.com")) is None
+
 def test_mfa_setup_login_and_recovery(client):
     email, password = register_verified(client)
     tokens = login(client)

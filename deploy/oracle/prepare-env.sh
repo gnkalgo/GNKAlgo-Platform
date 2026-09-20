@@ -45,7 +45,14 @@ done
 postgres_password="$(openssl rand -hex 32)"
 jwt_secret="$(openssl rand -hex 64)"
 api_key_pepper="$(openssl rand -hex 64)"
-field_encryption_key="$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '\n')"
+field_encryption_key="$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '\r\n')"
+
+# Fernet requires exactly 32 bytes encoded with URL-safe base64. Fail before
+# writing .env if the host OpenSSL output is not in the expected form.
+if [[ ! "$field_encryption_key" =~ ^[A-Za-z0-9_-]{43}=$ ]]; then
+  echo "Failed to generate a valid FIELD_ENCRYPTION_KEY." >&2
+  exit 1
+fi
 
 umask 077
 {

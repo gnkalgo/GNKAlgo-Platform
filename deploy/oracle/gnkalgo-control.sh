@@ -76,6 +76,11 @@ require_project() {
 }
 
 validate_config() {
+  local field_encryption_key
+  field_encryption_key="$(sed -n 's/^FIELD_ENCRYPTION_KEY=//p' "$PROJECT_ROOT/.env" | head -n 1 | tr -d '\r')"
+  if [[ ! "$field_encryption_key" =~ ^[A-Za-z0-9_-]{43}=$ ]]; then
+    die "FIELD_ENCRYPTION_KEY is invalid. Run deploy/oracle/repair-encryption-key.sh before starting."
+  fi
   echo "Validating production configuration..."
   "${COMPOSE[@]}" config --quiet
 }
