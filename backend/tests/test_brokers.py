@@ -36,7 +36,15 @@ def test_callback_state_is_single_use(client, monkeypatch):
     url = f"/api/v1/brokers/fyers/callback?s=ok&code=200&auth_code=fyers-auth-code&state={state}"
     assert client.get(url, follow_redirects=False).status_code == 302
     assert adapter.last_code == "fyers-auth-code"
-    assert client.get(url, follow_redirects=False).status_code == 400
+    reused = client.get(url, follow_redirects=False)
+    assert reused.status_code == 302
+    assert "error=invalid_state" in reused.headers["location"]
+
+def test_incomplete_lowercase_callback_redirects_safely(client):
+    callback = client.get("/api/v1/brokers/fyers/callback", follow_redirects=False)
+    assert callback.status_code == 302
+    assert "broker=fyers" in callback.headers["location"]
+    assert "error=invalid_callback" in callback.headers["location"]
 
 def test_broker_endpoints_require_authentication(client):
     assert client.get("/api/v1/brokers").status_code == 401

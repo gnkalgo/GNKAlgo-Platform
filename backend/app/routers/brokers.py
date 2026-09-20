@@ -1,5 +1,6 @@
 import secrets
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
@@ -38,6 +39,12 @@ def _callback_code(broker: BrokerName, code: str | None, auth_code: str | None, 
         return code
     return None
 
+def _callback_failure(broker: BrokerName, error: str) -> RedirectResponse:
+    query = urlencode({"broker": broker.value.lower(), "error": error})
+    response = RedirectResponse(f"{settings.frontend_url}/settings/brokers?{query}", status_code=302)
+    response.delete_cookie("gnk_oauth_state", path="/api/v1/brokers")
+    return response
+
 @router.get("", response_model=list[BrokerOut])
 def list_connections(principal: Principal = Depends(get_principal), db: Session = Depends(get_db)):
     _scope(principal, "broker:read")
@@ -58,16 +65,16 @@ async def connect(broker: BrokerName, response: Response, request: Request, prin
 async def callback(broker: BrokerName, request: Request, state: str | None = Query(default=None), code: str | None = Query(default=None), auth_code: str | None = Query(default=None), tokenId: str | None = Query(default=None), gnk_oauth_state: str | None = Cookie(default=None), db: Session = Depends(get_db)):
     raw_state = state or gnk_oauth_state
     auth_code_value = _callback_code(broker, code, auth_code, tokenId)
-    if not raw_state or not auth_code_value: raise HTTPException(status_code=400, detail="Invalid broker callback")
+    if not raw_state or not auth_code_value: return _callback_failure(broker, "invalid_callback")
     saved = db.scalar(select(OAuthState).where(OAuthState.state_hash == hash_token(raw_state), OAuthState.broker == broker))
-    if not saved or saved.used_at or _aware(saved.expires_at) <= utcnow(): raise HTTPException(status_code=400, detail="Invalid or expired broker state")
+    if not saved or saved.used_at or _aware(saved.expires_at) <= utcnow(): return _callback_failure(broker, "invalid_state")
     saved.used_at = utcnow()
     try:
         credentials = await ADAPTERS[broker].exchange(auth_code_value, decrypt_json(saved.context_encrypted or encrypt_json({})))
         await ADAPTERS[broker].test(credentials)
     except BrokerError as exc:
         audit(db, "BROKER_CONNECTION_FAILED", saved.user_id, request, "broker", broker.value, {"error_code": exc.code}); db.commit()
-        raise HTTPException(status_code=400, detail="Broker authentication failed")
+        return _callback_failure(broker, "authentication_failed")
     existing = db.scalar(select(BrokerConnection).where(BrokerConnection.user_id == saved.user_id, BrokerConnection.broker == broker))
     if not existing:
         existing = BrokerConnection(user_id=saved.user_id, broker=broker, encrypted_credentials=encrypt_json(credentials)); db.add(existing)
