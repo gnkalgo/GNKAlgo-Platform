@@ -27,6 +27,19 @@ services:
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
     restart: unless-stopped
+  market-worker:
+    build: ./backend
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://gnkalgo:${POSTGRES_PASSWORD}@postgres:5432/gnkalgo
+      REDIS_URL: redis://redis:6379/0
+    command: ["sh", "-c", "alembic upgrade head && python -m app.market.worker"]
+    depends_on:
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    restart: unless-stopped
   web:
     build:
       context: ./frontend

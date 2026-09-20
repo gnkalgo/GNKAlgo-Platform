@@ -137,3 +137,64 @@ class AuditOut(ORMModel):
     target_id: str | None
     metadata_json: dict
     created_at: datetime
+
+class InstrumentOut(ORMModel):
+    id: str
+    exchange: str
+    segment: str
+    symbol: str
+    trading_symbol: str
+    name: str | None
+    instrument_type: str
+    expiry_at: datetime | None
+    strike: float | None
+    option_type: str | None
+    lot_size: int | None
+    tick_size: float | None
+
+class MarketQuoteOut(BaseModel):
+    schema_version: int = 1
+    instrument_id: str
+    exchange: str
+    segment: str
+    trading_symbol: str
+    source: str
+    mode: str
+    sequence: int
+    exchange_timestamp: datetime
+    received_at: datetime
+    ltp: float
+    last_quantity: float | None = None
+    open: float | None = None
+    high: float | None = None
+    low: float | None = None
+    previous_close: float | None = None
+    volume: float | None = None
+    open_interest: float | None = None
+    bid: float | None = None
+    ask: float | None = None
+    depth: dict | None = None
+    stale: bool = False
+
+class MarketCandleOut(ORMModel):
+    instrument_id: str
+    interval_seconds: int
+    start_at: datetime
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+    open_interest: float | None
+    source: str
+    is_complete: bool
+
+class MarketWsTicketOut(BaseModel):
+    ticket: str
+    expires_in: int
+
+class MarketStatusOut(BaseModel):
+    provider: str
+    redis_connected: bool
+    active_clients: int
+    active_subscriptions: int

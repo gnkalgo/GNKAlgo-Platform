@@ -1,4 +1,5 @@
 import os
+import asyncio
 os.environ.update({"ENVIRONMENT": "test", "DATABASE_URL": "sqlite://", "JWT_SECRET": "test-jwt-secret-that-is-long-and-random", "API_KEY_PEPPER": "test-api-pepper-that-is-long-and-random", "FIELD_ENCRYPTION_KEY": "MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA=", "EXPOSE_DEV_TOKENS": "true"})
 
 import pytest
@@ -10,6 +11,7 @@ from app.database import Base, get_db
 from app.main import app
 from app.models import User
 from app.rate_limit import limiter
+from app.market.bus import market_bus
 
 engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
 TestingSession = sessionmaker(bind=engine, expire_on_commit=False)
@@ -23,7 +25,7 @@ app.dependency_overrides[get_db] = override_db
 
 @pytest.fixture(autouse=True)
 def clean_db():
-    Base.metadata.drop_all(engine); Base.metadata.create_all(engine); limiter.events.clear()
+    Base.metadata.drop_all(engine); Base.metadata.create_all(engine); limiter.events.clear(); asyncio.run(market_bus.reset())
     yield
 
 @pytest.fixture

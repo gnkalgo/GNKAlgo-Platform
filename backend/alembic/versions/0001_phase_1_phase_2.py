@@ -9,7 +9,11 @@ branch_labels = None
 depends_on = None
 
 def upgrade() -> None:
-    Base.metadata.create_all(bind=op.get_bind(), checkfirst=True)
+    # Keep the historical migration pinned to its original tables. Calling
+    # metadata.create_all() here would accidentally create tables from future phases.
+    bind = op.get_bind()
+    for table_name in ["users", "user_sessions", "one_time_tokens", "oauth_states", "broker_connections", "api_keys", "audit_logs"]:
+        Base.metadata.tables[table_name].create(bind=bind, checkfirst=True)
 
 def downgrade() -> None:
     # Explicit table order preserves foreign-key rollback safety.

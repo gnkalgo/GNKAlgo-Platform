@@ -1,0 +1,7 @@
+.market-search { display:flex; gap:10px; margin-top:22px; }
+.market-search input { flex:1; background:#0b1714; border:1px solid var(--line); color:var(--text); padding:13px 14px; border-radius:8px; }
+.market-results { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:8px; margin-top:12px; }
+.market-results button { text-align:left; border:1px solid var(--line); background:#0c1815; color:var(--text); padding:12px; border-radius:8px; cursor:pointer; }
+.market-results button:hover { border-color:var(--green); }
+.market-results span { display:block; color:var(--muted); font-size:11px; margin-top:4px; }
+.market-table-wrap { overflow:auto; }

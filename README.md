@@ -1,6 +1,8 @@
-# GnKAlgo — Phase 1 + Phase 2
+# GnKAlgo — Phase 1, Phase 2 and Phase 6 Market Data Foundation
 
 Production-oriented identity, broker connection, and scoped API-credential foundation for GnKAlgo. The attached GnKAlgo artwork is used as the application brand asset.
+
+Phase 6 now adds the tenant-isolated market-data contracts, Redis data plane, instrument master, candle aggregation, authenticated WebSocket gateway, dedicated worker and watchlist UI. See [PHASE-6.md](PHASE-6.md). Live broker runners remain fail-closed until their production credentials, entitlements and packet-level acceptance tests are supplied.
 
 ## What is implemented
 
@@ -140,6 +142,7 @@ specific temporary-service error if SMTP cannot deliver the verification email.
 - User/session: `/api/v1/users/me`, `/users/me/security`, `/users/me/password`, `/sessions`, `/sessions/{id}/revoke`
 - Brokers: `/api/v1/brokers`, `/{broker}/connect`, `/{broker}/callback`, `/{id}`, `/{id}/test`, `/{id}/reconnect`
 - API keys: `/api/v1/api-keys`, `/{id}`, `/{id}/rotate`, `/{id}/revoke`, and scoped validation example `/validate/profile`
+- Market data: `/api/v1/market/instruments`, `/quotes`, `/candles`, `/status`, `/ws-ticket`, and WebSocket `/stream`
 - Admin: `/api/v1/admin/users`, `/admin/users/{id}`, `/admin/audit`
 
 FastAPI OpenAPI is available at `/docs` outside production.

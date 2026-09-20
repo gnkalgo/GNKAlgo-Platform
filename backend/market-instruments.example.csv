@@ -1,0 +1,3 @@
+exchange,segment,symbol,trading_symbol,name,instrument_type,lot_size,tick_size,option_type,strike,dhan_token,fyers_token,upstox_token
+NSE,EQ,SBIN,SBIN-EQ,State Bank of India,EQUITY,1,0.05,,,1333,NSE:SBIN-EQ,NSE_EQ|INE062A01020
+NSE,INDEX,NIFTY50,NIFTY 50,Nifty 50,INDEX,1,0.05,,,,NSE:NIFTY50-INDEX,NSE_INDEX|Nifty 50

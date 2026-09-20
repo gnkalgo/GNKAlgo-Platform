@@ -6,6 +6,12 @@ export function saveTokens(data: {access_token:string; refresh_token:string}) {
   localStorage.setItem("gnk_refresh", data.refresh_token);
 }
 export function clearTokens() { sessionStorage.removeItem("gnk_access"); localStorage.removeItem("gnk_refresh"); }
+export function marketWebSocketUrl(ticket: string) {
+  const url = new URL(`${API_URL}/market/stream`, window.location.origin);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  url.searchParams.set("ticket", ticket);
+  return url.toString();
+}
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = getAccessToken();

@@ -1,7 +1,7 @@
 import enum
 import uuid
 from datetime import datetime, timezone
-from sqlalchemy import JSON, Boolean, DateTime, Enum, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, DateTime, Enum, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from .database import Base
 
@@ -133,3 +133,62 @@ class AuditLog(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
 
 Index("ix_audit_user_created", AuditLog.user_id, AuditLog.created_at)
+
+class Instrument(Base):
+    """Broker-independent security master used by every market-data adapter."""
+    __tablename__ = "instruments"
+    __table_args__ = (
+        UniqueConstraint("exchange", "segment", "symbol", name="uq_instrument_identity"),
+        Index("ix_instrument_search", "exchange", "segment", "trading_symbol"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    exchange: Mapped[str] = mapped_column(String(16), index=True)
+    segment: Mapped[str] = mapped_column(String(24), index=True)
+    symbol: Mapped[str] = mapped_column(String(160))
+    trading_symbol: Mapped[str] = mapped_column(String(160), index=True)
+    name: Mapped[str | None] = mapped_column(String(255), index=True)
+    instrument_type: Mapped[str] = mapped_column(String(32), index=True)
+    expiry_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    strike: Mapped[float | None] = mapped_column(Float)
+    option_type: Mapped[str | None] = mapped_column(String(8))
+    lot_size: Mapped[int | None] = mapped_column(Integer)
+    tick_size: Mapped[float | None] = mapped_column(Float)
+    broker_tokens: Mapped[dict] = mapped_column(JSON, default=dict)
+    metadata_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+class MarketCandle(Base):
+    """Normalized OHLCV bars. Raw high-volume ticks are deliberately not stored here."""
+    __tablename__ = "market_candles"
+    __table_args__ = (
+        UniqueConstraint("user_id", "instrument_id", "interval_seconds", "start_at", name="uq_market_candle_bucket"),
+        Index("ix_market_candle_lookup", "user_id", "instrument_id", "interval_seconds", "start_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    instrument_id: Mapped[str] = mapped_column(ForeignKey("instruments.id", ondelete="CASCADE"), index=True)
+    interval_seconds: Mapped[int] = mapped_column(Integer)
+    start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    open: Mapped[float] = mapped_column(Float)
+    high: Mapped[float] = mapped_column(Float)
+    low: Mapped[float] = mapped_column(Float)
+    close: Mapped[float] = mapped_column(Float)
+    volume: Mapped[float] = mapped_column(Float, default=0)
+    open_interest: Mapped[float | None] = mapped_column(Float)
+    source: Mapped[str] = mapped_column(String(24))
+    is_complete: Mapped[bool] = mapped_column(Boolean, default=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+class MarketWsTicket(Base):
+    """Short-lived, single-use credential for a market WebSocket upgrade."""
+    __tablename__ = "market_ws_tickets"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    session_id: Mapped[str | None] = mapped_column(ForeignKey("user_sessions.id", ondelete="CASCADE"), index=True)
+    api_key_id: Mapped[str | None] = mapped_column(ForeignKey("api_keys.id", ondelete="CASCADE"), index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

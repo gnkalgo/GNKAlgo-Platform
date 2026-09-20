@@ -38,6 +38,13 @@ class Settings(BaseSettings):
     upstox_client_id: str | None = None
     upstox_client_secret: str | None = None
     upstox_redirect_uri: str = "http://localhost:8000/api/v1/brokers/upstox/callback"
+    market_ws_ticket_seconds: int = 30
+    market_max_subscriptions: int = 200
+    market_quote_ttl_seconds: int = 30
+    market_redis_prefix: str = "gnk:market"
+    market_feed_provider: Literal["disabled", "simulated", "broker"] = "disabled"
+    market_simulated_interval_seconds: float = 1.0
+    market_candle_intervals: str = "60,300,900,3600,86400"
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -61,6 +68,15 @@ class Settings(BaseSettings):
             raise RuntimeError("COOKIE_SECURE must be true in production")
         if not self.smtp_host:
             raise RuntimeError("SMTP_HOST is required in production")
+        if self.market_feed_provider == "simulated":
+            raise RuntimeError("MARKET_FEED_PROVIDER=simulated is not permitted in production")
+
+    @property
+    def candle_intervals(self) -> tuple[int, ...]:
+        values = tuple(sorted({int(value.strip()) for value in self.market_candle_intervals.split(",") if value.strip()}))
+        if not values or any(value <= 0 for value in values):
+            raise ValueError("MARKET_CANDLE_INTERVALS must contain positive integers")
+        return values
 
 
 @lru_cache
