@@ -2,7 +2,7 @@
 
 Production-oriented identity, broker connection, and scoped API-credential foundation for GnKAlgo. The attached GnKAlgo artwork is used as the application brand asset.
 
-Phase 6 now adds the tenant-isolated market-data contracts, Redis data plane, instrument master, candle aggregation, authenticated WebSocket gateway, dedicated worker and watchlist UI. See [PHASE-6.md](PHASE-6.md). Live broker runners remain fail-closed until their production credentials, entitlements and packet-level acceptance tests are supplied.
+Phase 6 adds tenant-isolated market-data contracts, Redis fan-out, an instrument master, candle aggregation, authenticated WebSockets, a dedicated worker, a watchlist UI, and a credential-gated Dhan v2 live-feed runner. See [PHASE-6.md](PHASE-6.md). Live data remains disabled by default until production entitlement and soak acceptance pass.
 
 ## What is implemented
 

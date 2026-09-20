@@ -8,7 +8,8 @@ Phase 6 adds a read-only, tenant-isolated market-data plane to the existing iden
 - `app.market.adapters`: Dhan v2, FYERS v3 and Upstox v3 decoded-payload normalizers
 - `app.market.bus`: Redis latest-quote cache, pub/sub fan-out and subscription coordination
 - `app.market.candles`: tenant-scoped OHLCV aggregation
-- `app.market.worker`: separate feed process; disabled by default, with a deterministic simulation mode for acceptance testing
+- `app.market.dhan`: Dhan v2 binary decoder, batched subscriptions and credential-gated reconnecting sessions
+- `app.market.worker`: separate feed process; disabled by default, with deterministic simulation and Dhan live modes
 - `app.routers.market`: instrument search, snapshots, candles, status, one-time WebSocket tickets and live stream
 - `/market`: authenticated Next.js watchlist
 
@@ -38,9 +39,19 @@ The importer upserts instruments by exchange, segment and canonical symbol. Prov
 
 - `MARKET_FEED_PROVIDER=disabled`: production-safe default; APIs are available but no ticks are generated.
 - `MARKET_FEED_PROVIDER=simulated`: deterministic acceptance feed. Production configuration rejects this value.
-- `MARKET_FEED_PROVIDER=broker`: reserved for the live broker SDK runners. The current worker fails closed until those credential-gated runners are configured.
+- `MARKET_FEED_PROVIDER=dhan`: Dhan v2 live feed. A session starts only for a user who has an active Dhan broker connection and a browser subscription; reconnects automatically resubscribe.
+- `MARKET_FEED_PROVIDER=broker`: reserved for future broker runners and still fails closed.
 
-Decoded Dhan/FYERS/Upstox SDK callbacks must pass through their adapter's `normalize()` method and then call `market_bus.publish(user_id, quote)`. Never publish a broker token, account identifier or unnormalized payload.
+The Dhan runner decodes ticker, quote, full-depth, OI, previous-close and disconnect packets. Subscription requests are limited to 100 instruments per message. Authentication failures mark the broker connection for reauthorization, while access tokens are never logged or published. Decoded Dhan packets pass through `DhanV2Adapter` before tenant-scoped publication.
+
+### Enable Dhan after acceptance
+
+1. Confirm the Dhan account has live market-data entitlement and reconnect the account from the Brokers page so a current access token is stored.
+2. Import instruments with a `DHAN` security ID in `broker_tokens`; exchange/segment are mapped to Dhan's v2 segment codes. For unusual instruments, use `{"DHAN":{"security_id":"...","exchange_segment":"BSE_FNO"}}`.
+3. Leave `DHAN_MARKET_REQUEST_CODE=17` for quote mode, or use `15` for ticker / `21` for full depth.
+4. Set `MARKET_FEED_PROVIDER=dhan`, reload the stack, and watch `market-worker` logs. Keep the value `disabled` until this production gate is approved.
+
+Protocol references: [Dhan live market feed v2](https://dhanhq.co/docs/v2/live-market-feed/) and the [official Dhan Python client](https://github.com/dhan-oss/DhanHQ-py/blob/main/src/dhanhq/marketfeed.py).
 
 ## Local acceptance run
 
@@ -59,8 +70,8 @@ cd frontend && npm run typecheck && npm run build
 docker compose config
 ```
 
-Tests cover authorization, instrument search, tenant isolation, single-use WebSocket tickets, subscription commands, candle isolation and all three normalizers.
+Tests cover authorization, instrument search, tenant isolation, single-use WebSocket tickets, subscription commands, candle isolation, all three normalizers, Dhan binary packet fixtures, depth decoding, segment mapping and 100-instrument request batching.
 
 ## Production gate
 
-Do not set `MARKET_FEED_PROVIDER=broker` until each live runner has recorded-packet contract tests, broker connection-limit enforcement, reconnect/resubscribe behavior, full-session soak results, market-data entitlement approval, and operational alerting. The API deliberately fails closed instead of presenting simulated or stale prices as live data.
+Do not set `MARKET_FEED_PROVIDER=dhan` until a real entitled account passes packet-level smoke tests, reconnect/resubscribe tests, a full-session soak, quote-latency monitoring and operational alerting. The implementation enforces one Dhan feed connection per active user, below Dhan's five-connection account limit, and keeps production disabled by default. The API deliberately fails closed instead of presenting simulated prices as live data.

@@ -18,6 +18,8 @@ from ..models import Instrument
 from .bus import market_bus
 from .candles import CandleAggregator
 from .contracts import NormalizedQuote
+from .adapters import DhanV2Adapter
+from .dhan import DhanFeedSupervisor, DhanSubscription
 
 logger = logging.getLogger("gnkalgo.market.worker")
 
@@ -34,6 +36,14 @@ class MarketWorker:
 
     async def run(self) -> None:
         logger.info("market worker started", extra={"provider": self.settings.market_feed_provider})
+        if self.settings.market_feed_provider == "dhan":
+            supervisor = DhanFeedSupervisor(
+                self._handle_dhan_packet,
+                request_code=self.settings.dhan_market_request_code,
+                reconnect_max_seconds=self.settings.dhan_market_reconnect_max_seconds,
+            )
+            await supervisor.run(self._stopping)
+            return
         while not self._stopping.is_set():
             if self.settings.market_feed_provider == "disabled":
                 await asyncio.sleep(5)
@@ -42,6 +52,14 @@ class MarketWorker:
                 raise RuntimeError("Broker feed SDK runners must be configured before MARKET_FEED_PROVIDER=broker")
             await self._simulate_once()
             await asyncio.sleep(self.settings.market_simulated_interval_seconds)
+
+    async def _handle_dhan_packet(self, user_id: str, subscription: DhanSubscription, payload: dict) -> None:
+        key = (user_id, subscription.instrument_id)
+        self.sequences[key] += 1
+        quote = DhanV2Adapter().normalize(subscription.instrument, payload, self.sequences[key])
+        await market_bus.publish(user_id, quote)
+        with SessionLocal() as db:
+            self.candles.ingest(db, user_id, quote)
 
     async def _simulate_once(self) -> None:
         subscriptions = await market_bus.active_subscriptions()

@@ -35,8 +35,9 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://gnkalgo:${POSTGRES_PASSWORD}@postgres:5432/gnkalgo
       REDIS_URL: redis://redis:6379/0
-    command: ["sh", "-c", "alembic upgrade head && python -m app.market.worker"]
+    command: ["python", "-m", "app.market.worker"]
     depends_on:
+      api: {condition: service_started}
       postgres: {condition: service_healthy}
       redis: {condition: service_healthy}
     restart: unless-stopped

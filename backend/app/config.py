@@ -42,9 +42,11 @@ class Settings(BaseSettings):
     market_max_subscriptions: int = 200
     market_quote_ttl_seconds: int = 30
     market_redis_prefix: str = "gnk:market"
-    market_feed_provider: Literal["disabled", "simulated", "broker"] = "disabled"
+    market_feed_provider: Literal["disabled", "simulated", "dhan", "broker"] = "disabled"
     market_simulated_interval_seconds: float = 1.0
     market_candle_intervals: str = "60,300,900,3600,86400"
+    dhan_market_request_code: Literal[15, 17, 21] = 17
+    dhan_market_reconnect_max_seconds: float = 30.0
 
     @field_validator("cors_origins", mode="before")
     @classmethod
