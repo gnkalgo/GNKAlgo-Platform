@@ -58,6 +58,12 @@ class Settings(BaseSettings):
     trading_max_absolute_position: int = Field(default=5000, ge=1)
     paper_slippage_bps: float = Field(default=2.0, ge=0, le=100)
     dhan_order_reconcile_seconds: float = Field(default=5.0, ge=1)
+    strategy_engine_enabled: bool = False
+    strategy_live_confirmation: str = ""
+    strategy_poll_seconds: float = Field(default=2.0, ge=1)
+    strategy_max_orders_per_user_per_day: int = Field(default=20, ge=1)
+    strategy_max_order_attempts_per_minute: int = Field(default=8, ge=1, le=10)
+    strategy_max_candle_lag_seconds: float = Field(default=180.0, gt=0)
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -93,6 +99,8 @@ class Settings(BaseSettings):
                 raise RuntimeError("TRADING_LIVE_CONFIRMATION must explicitly enable Dhan live orders")
             if not self.dhan_static_ip_confirmed:
                 raise RuntimeError("DHAN_STATIC_IP_CONFIRMED must be true for live order APIs")
+            if self.strategy_engine_enabled and self.strategy_live_confirmation != "ENABLE_LIVE_STRATEGIES":
+                raise RuntimeError("STRATEGY_LIVE_CONFIRMATION must explicitly enable live strategies")
 
     @property
     def candle_intervals(self) -> tuple[int, ...]:

@@ -6,6 +6,8 @@ Phase 6 adds tenant-isolated market-data contracts, Redis fan-out, an instrument
 
 Phase 7.1 adds deterministic paper execution and acceptance gates. Phase 7.2 adds explicitly gated Dhan live placement, modification, cancellation, broker order/trade-book reconciliation, positions, risk limits and kill switches. See the [Phase 7.2 acceptance and deployment runbook](PHASE-7.2.md). Live order execution remains disabled by default.
 
+Phase 8 adds versioned closed-candle SMA strategies, durable runs and signals, risk-gated signal-to-order routing, a dedicated worker, and a strategy UI. Automation remains disabled by default; see the [Phase 8 runbook](PHASE-8.md).
+
 ## What is implemented
 
 ### Phase 1 — identity and access
@@ -146,6 +148,7 @@ specific temporary-service error if SMTP cannot deliver the verification email.
 - API keys: `/api/v1/api-keys`, `/{id}`, `/{id}/rotate`, `/{id}/revoke`, and scoped validation example `/validate/profile`
 - Market data: `/api/v1/market/instruments`, `/quotes`, `/candles`, `/status`, `/ws-ticket`, and WebSocket `/stream`
 - Trading: `/api/v1/trading/status`, `/orders`, `/orders/{id}`, `/orders/{id}/cancel`, `/executions`, `/positions`, and `/kill-switch`
+- Strategies: `/api/v1/strategies`, `/{id}`, `/{id}/activate`, `/{id}/pause`, `/{id}/versions`, `/{id}/preview`, `/{id}/runs`, `/{id}/signals`
 - Admin: `/api/v1/admin/users`, `/admin/users/{id}`, `/admin/audit`
 
 FastAPI OpenAPI is available at `/docs` outside production.

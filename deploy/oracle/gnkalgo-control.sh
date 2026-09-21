@@ -126,7 +126,7 @@ case "$COMMAND" in
     validate_config
     echo "Rebuilding and recreating application and edge services..."
     "${COMPOSE[@]}" up --detach postgres redis
-    "${COMPOSE[@]}" up --build --detach --force-recreate --remove-orphans api market-worker order-reconciler web nginx caddy
+    "${COMPOSE[@]}" up --build --detach --force-recreate --remove-orphans api market-worker order-reconciler strategy-worker web nginx caddy
     show_status
     ;;
 

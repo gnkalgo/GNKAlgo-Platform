@@ -69,6 +69,26 @@ class OrderValidity(str, enum.Enum):
     DAY = "DAY"
     IOC = "IOC"
 
+class StrategyStatus(str, enum.Enum):
+    DRAFT = "DRAFT"
+    ACTIVE = "ACTIVE"
+    PAUSED = "PAUSED"
+    ARCHIVED = "ARCHIVED"
+    ERROR = "ERROR"
+
+class StrategyRunStatus(str, enum.Enum):
+    STARTED = "STARTED"
+    SUCCEEDED = "SUCCEEDED"
+    NO_SIGNAL = "NO_SIGNAL"
+    SKIPPED = "SKIPPED"
+    FAILED = "FAILED"
+
+class StrategySignalStatus(str, enum.Enum):
+    CREATED = "CREATED"
+    ORDER_SUBMITTED = "ORDER_SUBMITTED"
+    SUPPRESSED = "SUPPRESSED"
+    REJECTED = "REJECTED"
+
 class User(Base):
     __tablename__ = "users"
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
@@ -297,3 +317,80 @@ class TradingControl(Base):
     reason: Mapped[str | None] = mapped_column(String(255))
     updated_by_user_id: Mapped[str | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+class Strategy(Base):
+    """Versioned, constrained strategy definition. No arbitrary code is stored or executed."""
+    __tablename__ = "strategies"
+    __table_args__ = (
+        UniqueConstraint("user_id", "name", name="uq_strategy_user_name"),
+        Index("ix_strategy_worker", "status", "execution_mode", "updated_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    instrument_id: Mapped[str] = mapped_column(ForeignKey("instruments.id", ondelete="RESTRICT"), index=True)
+    name: Mapped[str] = mapped_column(String(100))
+    kind: Mapped[str] = mapped_column(String(32), default="SMA_CROSS")
+    status: Mapped[StrategyStatus] = mapped_column(Enum(StrategyStatus), default=StrategyStatus.DRAFT, index=True)
+    execution_mode: Mapped[str] = mapped_column(String(12), index=True)
+    timeframe_seconds: Mapped[int] = mapped_column(Integer)
+    fast_period: Mapped[int] = mapped_column(Integer)
+    slow_period: Mapped[int] = mapped_column(Integer)
+    quantity: Mapped[int] = mapped_column(Integer)
+    product_type: Mapped[ProductType] = mapped_column(Enum(ProductType))
+    order_type: Mapped[OrderType] = mapped_column(Enum(OrderType))
+    limit_offset_bps: Mapped[float] = mapped_column(Float, default=0)
+    max_orders_per_day: Mapped[int] = mapped_column(Integer, default=4)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    last_evaluated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    activated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    paused_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    last_error: Mapped[str | None] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+class StrategyVersion(Base):
+    __tablename__ = "strategy_versions"
+    __table_args__ = (UniqueConstraint("strategy_id", "version", name="uq_strategy_version"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    strategy_id: Mapped[str] = mapped_column(ForeignKey("strategies.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    version: Mapped[int] = mapped_column(Integer)
+    definition_json: Mapped[dict] = mapped_column(JSON)
+    created_by_user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+class StrategyRun(Base):
+    __tablename__ = "strategy_runs"
+    __table_args__ = (
+        UniqueConstraint("strategy_id", "candle_start_at", name="uq_strategy_candle_run"),
+        Index("ix_strategy_run_user_time", "user_id", "started_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    strategy_id: Mapped[str] = mapped_column(ForeignKey("strategies.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    strategy_version: Mapped[int] = mapped_column(Integer)
+    candle_start_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    status: Mapped[StrategyRunStatus] = mapped_column(Enum(StrategyRunStatus), default=StrategyRunStatus.STARTED)
+    diagnostics_json: Mapped[dict] = mapped_column(JSON, default=dict)
+    started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+class StrategySignal(Base):
+    __tablename__ = "strategy_signals"
+    __table_args__ = (
+        UniqueConstraint("run_id", name="uq_strategy_signal_run"),
+        Index("ix_strategy_signal_user_time", "user_id", "generated_at"),
+    )
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=uuid_str)
+    strategy_id: Mapped[str] = mapped_column(ForeignKey("strategies.id", ondelete="CASCADE"), index=True)
+    run_id: Mapped[str] = mapped_column(ForeignKey("strategy_runs.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    instrument_id: Mapped[str] = mapped_column(ForeignKey("instruments.id", ondelete="RESTRICT"), index=True)
+    order_id: Mapped[str | None] = mapped_column(ForeignKey("trading_orders.id", ondelete="SET NULL"), unique=True, index=True)
+    action: Mapped[OrderSide] = mapped_column(Enum(OrderSide))
+    status: Mapped[StrategySignalStatus] = mapped_column(Enum(StrategySignalStatus), index=True)
+    quantity: Mapped[int] = mapped_column(Integer)
+    reference_price: Mapped[float] = mapped_column(Float)
+    client_order_id: Mapped[str] = mapped_column(String(30))
+    reason: Mapped[str | None] = mapped_column(String(120))
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)

@@ -54,6 +54,20 @@ services:
       api: {condition: service_started}
       postgres: {condition: service_healthy}
     restart: unless-stopped
+  strategy-worker:
+    build: ./backend
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+psycopg://gnkalgo:${POSTGRES_PASSWORD}@postgres:5432/gnkalgo
+      REDIS_URL: redis://redis:6379/0
+    command: ["python", "-m", "app.strategies.worker"]
+    depends_on:
+      api: {condition: service_started}
+      postgres: {condition: service_healthy}
+      redis: {condition: service_healthy}
+    restart: unless-stopped
   web:
     build:
       context: ./frontend

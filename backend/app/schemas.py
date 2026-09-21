@@ -1,6 +1,10 @@
 from datetime import datetime
+from typing import Literal
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
-from .models import ApiKeyStatus, BrokerName, BrokerStatus, OrderSide, OrderStatus, OrderType, OrderValidity, ProductType, Role
+from .models import (
+    ApiKeyStatus, BrokerName, BrokerStatus, OrderSide, OrderStatus, OrderType,
+    OrderValidity, ProductType, Role, StrategyRunStatus, StrategySignalStatus, StrategyStatus,
+)
 
 class ORMModel(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -301,3 +305,97 @@ class KillSwitchRequest(BaseModel):
 class KillSwitchOut(BaseModel):
     halted: bool
     reason: str | None
+
+class StrategyCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=100)
+    instrument_id: str
+    execution_mode: Literal["PAPER", "LIVE"] = "PAPER"
+    timeframe_seconds: int = Field(default=60, ge=60, le=86400)
+    fast_period: int = Field(default=5, ge=2, le=200)
+    slow_period: int = Field(default=20, ge=3, le=500)
+    quantity: int = Field(default=1, ge=1)
+    product_type: ProductType = ProductType.INTRADAY
+    order_type: OrderType = OrderType.MARKET
+    limit_offset_bps: float = Field(default=0, ge=0, le=100)
+    max_orders_per_day: int = Field(default=4, ge=1, le=100)
+
+    @model_validator(mode="after")
+    def periods_are_ordered(self):
+        if self.fast_period >= self.slow_period:
+            raise ValueError("fast_period must be less than slow_period")
+        return self
+
+class StrategyUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=1, max_length=100)
+    timeframe_seconds: int | None = Field(default=None, ge=60, le=86400)
+    fast_period: int | None = Field(default=None, ge=2, le=200)
+    slow_period: int | None = Field(default=None, ge=3, le=500)
+    quantity: int | None = Field(default=None, ge=1)
+    product_type: ProductType | None = None
+    order_type: OrderType | None = None
+    limit_offset_bps: float | None = Field(default=None, ge=0, le=100)
+    max_orders_per_day: int | None = Field(default=None, ge=1, le=100)
+
+class StrategyActivate(BaseModel):
+    confirmation: str | None = Field(default=None, max_length=80)
+
+class StrategyOut(ORMModel):
+    id: str
+    instrument_id: str
+    name: str
+    kind: str
+    status: StrategyStatus
+    execution_mode: str
+    timeframe_seconds: int
+    fast_period: int
+    slow_period: int
+    quantity: int
+    product_type: ProductType
+    order_type: OrderType
+    limit_offset_bps: float
+    max_orders_per_day: int
+    version: int
+    last_evaluated_at: datetime | None
+    activated_at: datetime | None
+    paused_at: datetime | None
+    last_error: str | None
+    created_at: datetime
+    updated_at: datetime
+
+class StrategyVersionOut(ORMModel):
+    id: str
+    strategy_id: str
+    version: int
+    definition_json: dict
+    created_at: datetime
+
+class StrategyRunOut(ORMModel):
+    id: str
+    strategy_id: str
+    strategy_version: int
+    candle_start_at: datetime
+    status: StrategyRunStatus
+    diagnostics_json: dict
+    started_at: datetime
+    finished_at: datetime | None
+
+class StrategySignalOut(ORMModel):
+    id: str
+    strategy_id: str
+    run_id: str
+    instrument_id: str
+    order_id: str | None
+    action: OrderSide
+    status: StrategySignalStatus
+    quantity: int
+    reference_price: float
+    client_order_id: str
+    reason: str | None
+    generated_at: datetime
+
+class StrategyPreviewOut(BaseModel):
+    candle_start_at: datetime
+    action: OrderSide
+    close: float
+    fast_average: float
+    slow_average: float
